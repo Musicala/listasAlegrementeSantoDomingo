@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lucero - Escena 5</title>
+
+  <!-- jQuery + DataTables -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css" />
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin:0; padding:0; text-align:center; background:#f8f9fa; }
+    .container { max-width: 1000px; margin:40px auto; padding:20px; background:#fff; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,.1); }
+    h1 { color:#0056b3; font-size:26px; font-weight:bold; margin:0; }
+    .subtitulo { color:#555; margin:6px 0 16px; }
+    table { width:100%; border-collapse:collapse; margin-top:16px; }
+    th, td { padding:10px; text-align:center; border-bottom:1px solid #ddd; }
+    th { background:#0056b3; color:#fff; }
+    tr:hover { background:#f1f1f1; }
+
+    .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center; margin:15px 0; }
+    .filters .group { display:flex; align-items:center; gap:8px; }
+    .filters label { font-size:14px; color:#003d82; font-weight:600; }
+    .filters input[type="text"], .filters select {
+      padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; min-width:160px; background:#fff;
+    }
+    .filters .toggle { display:flex; align-items:center; gap:6px; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; }
+    @media (max-width:600px){ th, td{ font-size:12px; padding:8px; } .filters input, .filters select{ min-width:120px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 id="tituloPrincipal">Lucero - Escena 5</h1>
+    <p class="subtitulo" id="subtitulo">Teatro</p>
+
+    <!-- Filtros por columna -->
+    <div class="filters">
+      <div class="group">
+        <label for="fNombre">Nombre</label>
+        <input id="fNombre" type="text" placeholder="Buscar nombre...">
+      </div>
+      <div class="group">
+        <label for="fCiclo">Ciclo</label>
+        <select id="fCiclo">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="group">
+        <label for="fJornada">Jornada</label>
+        <select id="fJornada">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="toggle">
+        <input id="fOrquesta" type="checkbox">
+        <label for="fOrquesta">Solo Orquesta = Sí</label>
+      </div>
+    </div>
+
+    <table id="tablaEscena">
+      <thead><tr></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <p class="copyright">© 2025 Musicala.</p>
+  </div>
+
+  <script>
+    $(function(){
+      const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXKSxOP6nT-58TiSY3PpsuIxVn0lQWEIKvT7lsuRQdWrll5DpF5xsoPMr8JWjEGfqjjx_sjB1ZuBDe/pub?gid=126291885&single=true&output=tsv";
+
+      let table;               // instancia DataTable
+      let colIdx = {};         // índices por nombre: {nombre, ciclo, jornada, orquesta}
+      const setCiclo = new Set();
+      const setJornada = new Set();
+
+      fetch(sheetURL)
+        .then(r => r.text())
+        .then(tsv => {
+          const lines = tsv.replace(/\r/g, "").split("\n").filter(l => l.trim() !== "");
+          if (lines.length < 4) throw new Error("TSV insuficiente.");
+
+          // Títulos (A1 y A2)
+          $("#tituloPrincipal").text(lines[0].split("\t")[0] || "Lucero - Escena 5");
+          $("#subtitulo").text(lines[1].split("\t")[0] || "Teatro");
+
+          // Encabezados (fila 3)
+          const headers = lines[2].split("\t").map(h => h.trim());
+          const thead = $("#tablaEscena thead tr");
+          headers.forEach(h => thead.append(`<th>${h}</th>`));
+
+          // Mapear índices
+          const lower = headers.map(h => h.toLowerCase());
+          colIdx.nombre   = lower.indexOf("nombre");
+          colIdx.ciclo    = lower.indexOf("ciclo");
+          colIdx.jornada  = lower.indexOf("jornada");
+          colIdx.orquesta = lower.indexOf("orquesta");
+
+          // Cargar filas (desde fila 4)
+          const tbody = $("#tablaEscena tbody");
+          for (let i = 3; i < lines.length; i++) {
+            const raw = lines[i].split("\t");
+            if (raw.every(c => (c || "").trim() === "")) continue;
+
+            // Convertir Orquesta TRUE/FALSE a Sí/No
+            if (colIdx.orquesta >= 0) {
+              const v = (raw[colIdx.orquesta] || "").trim().toLowerCase();
+              raw[colIdx.orquesta] = (v === "true") ? "Sí" : (v === "false" ? "No" : raw[colIdx.orquesta]);
+            }
+
+            // Recolectar valores únicos para selects
+            if (colIdx.ciclo >= 0) setCiclo.add((raw[colIdx.ciclo] || "").trim());
+            if (colIdx.jornada >= 0) setJornada.add((raw[colIdx.jornada] || "").trim());
+
+            const tds = raw.map(v => `<td>${(v || "").trim()}</td>`).join("");
+            tbody.append(`<tr>${tds}</tr>`);
+          }
+
+          // Poblar selects
+          [...setCiclo].filter(v => v).sort().forEach(v => $("#fCiclo").append(`<option value="${v}">${v}</option>`));
+          [...setJornada].filter(v => v).sort().forEach(v => $("#fJornada").append(`<option value="${v}">${v}</option>`));
+
+          // Inicializar DataTable
+          table = $("#tablaEscena").DataTable({
+            pageLength: 12,
+            language: { url: "https://cdn.datatables.net/plug-ins/1.13.4/i18n/es-ES.json" }
+          });
+
+          // Handlers de filtros
+          $("#fNombre").on("input", function(){
+            if (colIdx.nombre >= 0) table.column(colIdx.nombre).search(this.value).draw();
+          });
+
+          $("#fCiclo").on("change", function(){
+            if (colIdx.ciclo >= 0) {
+              const val = this.value ? `^${escapeRegex(this.value)}$` : "";
+              table.column(colIdx.ciclo).search(val, true, false).draw();
+            }
+          });
+
+          $("#fJornada").on("change", function(){
+            if (colIdx.jornada >= 0) {
+              const val = this.value ? `^${escapeRegex(this.value)}$` : "";
+              table.column(colIdx.jornada).search(val, true, false).draw();
+            }
+          });
+
+          $("#fOrquesta").on("change", function(){
+            if (colIdx.orquesta >= 0) {
+              const val = this.checked ? "^Sí$" : "";
+              table.column(colIdx.orquesta).search(val, true, false).draw();
+            }
+          });
+        })
+        .catch(err => {
+          console.error(err);
+          alert("No se pudo cargar la información. Revisa que el TSV esté publicado y accesible.");
+        });
+
+      function escapeRegex(text){
+        return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+    });
+  </script>
+</body>
+</html>
